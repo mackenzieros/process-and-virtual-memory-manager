@@ -31,8 +31,12 @@ func processCmds(cmdSlice []string, pm *processManager.ProcessManager) {
 		processManager.Timeout(pm)
 	case "in":
 		RunShell()
+	case "rq":
+		processManager.Request(pm, cmdNum)
+	case "re":
+
 	default:
-		fmt.Printf("Unable to process unknown command: %q.", cmdSlice[0])
+		fmt.Printf("Unable to process unknown command: %q.\n", cmdSlice[0])
 	}
 }
 
