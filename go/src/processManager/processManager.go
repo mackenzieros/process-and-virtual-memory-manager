@@ -30,6 +30,11 @@ func findAvailableProcess(pcbArr [16]*pcb) int {
 }
 
 func Create(pm *ProcessManager) {
+	if pm.pcbList[15] != nil {
+		fmt.Printf("Process list capacity at maximum\n")
+		return
+	}
+
 	parentProcess, withinBounds := pm.readyList.Get(0)
 
 	// Determine parent (-1 if root process)
@@ -39,7 +44,6 @@ func Create(pm *ProcessManager) {
 	}
 
 	// Allocate new PCB with necessary default values
-	// var latestIndex = len(pm.pcbList)
 	freeIndex := findAvailableProcess(pm.pcbList)
 	var newPcb = pcb{1, parent, DoublyLinkedList.New(), DoublyLinkedList.New(), freeIndex, -1}
 	pm.pcbList[freeIndex] = &newPcb
@@ -109,27 +113,65 @@ func Request(pm *ProcessManager, requestIndex int) {
 		return
 	}
 
+	// Get requested resource and currently running process
 	resourceToRequest := pm.rcbList[requestIndex]
 	currentProcessInterface, _ := pm.readyList.Get(0)
 	currentProcess := currentProcessInterface.(*pcb)
 
 	if resourceToRequest == nil {
+		// Resource not yet allocated, allocate it
 		resourceToRequest = &rcb{0, DoublyLinkedList.New()}
 		pm.rcbList[requestIndex] = resourceToRequest
 	}
 
 	if resourceToRequest.state == 0 {
+		// Allocate free resource
 		resourceToRequest.state = 1
 		currentProcess.resources.Append(&resourceToRequest)
 		fmt.Printf("Resource %d allocated\n", requestIndex)
 	} else {
+		// Block current process
 		currentProcess.state = 1
 		currentProcess.blockedOn = requestIndex
 		pm.readyList.Remove(0)
-		resourceToRequest.waitlist.Append(&currentProcess)
+		resourceToRequest.waitlist.Append(currentProcess)
 		fmt.Printf("Process %d blocked\n", currentProcess.index)
 		scheduler(pm)
 	}
+}
+
+func Release(pm *ProcessManager, releaseIndex int) {
+	if releaseIndex < 0 || releaseIndex > len(pm.rcbList) {
+		fmt.Printf("Release index: %d is out of range\n", releaseIndex)
+		return
+	}
+
+	// Get resource to release and currently running process
+	resourceToRelease := pm.rcbList[releaseIndex]
+	currentProcessInterface, _ := pm.readyList.Get(0)
+	currentProcess := currentProcessInterface.(*pcb)
+	currentProcess.blockedOn = -1
+
+	// Remove resource from currently running process' resource list
+	indexOfResource := currentProcess.resources.IndexOf(resourceToRelease)
+	currentProcess.resources.Remove(indexOfResource)
+
+	if resourceToRelease.waitlist.Empty() {
+		// No waiting processes, so set to free
+		resourceToRelease.state = 0
+	} else {
+		// Un-block process on resource's waitlist and move it to the ready list
+		unblockedProcessInterface, _ := resourceToRelease.waitlist.Get(0)
+		resourceToRelease.waitlist.Remove(0)
+		unblockedProcess := unblockedProcessInterface.(*pcb)
+
+		pm.readyList.Append(unblockedProcess)
+
+		unblockedProcess.blockedOn = -1
+		unblockedProcess.state = 0
+		unblockedProcess.resources.Append(resourceToRelease)
+	}
+	fmt.Printf("Resource %d released\n", releaseIndex)
 }
 
 func scheduler(pm *ProcessManager) {
@@ -142,9 +184,10 @@ func scheduler(pm *ProcessManager) {
 }
 
 func Timeout(pm *ProcessManager) {
-	currRunningProcess, _ := pm.readyList.Get(0)
+	currRunningProcessInterface, _ := pm.readyList.Get(0)
+	currRunningProcess := currRunningProcessInterface.(*pcb)
 	pm.readyList.Remove(0)
-	pm.readyList.Add(&currRunningProcess)
+	pm.readyList.Add(currRunningProcess)
 	scheduler(pm)
 }
 
