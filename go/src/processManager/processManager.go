@@ -2,6 +2,7 @@ package processManager
 
 import (
 	"fmt"
+	"os"
 
 	DoublyLinkedList "github.com/emirpasic/gods/lists/doublylinkedlist"
 )
@@ -31,8 +32,8 @@ func findAvailableProcess(pcbArr [16]*pcb) int {
 
 func Create(pm *ProcessManager) {
 	if pm.pcbList[15] != nil {
-		fmt.Printf("Process list capacity at maximum\n")
-		return
+		fmt.Printf("Error: process list capacity at maximum\n")
+		os.Exit(1)
 	}
 
 	parentProcess, withinBounds := pm.readyList.Get(0)
@@ -45,23 +46,41 @@ func Create(pm *ProcessManager) {
 
 	// Allocate new PCB with necessary default values
 	freeIndex := findAvailableProcess(pm.pcbList)
-	var newPcb = pcb{1, parent, DoublyLinkedList.New(), DoublyLinkedList.New(), freeIndex, -1}
-	pm.pcbList[freeIndex] = &newPcb
+	var newPcb = &pcb{1, parent, DoublyLinkedList.New(), DoublyLinkedList.New(), freeIndex, -1}
+	pm.pcbList[freeIndex] = newPcb
 
 	fmt.Printf("Process %d created\n", freeIndex)
 
 	// Add to ready list
-	pm.readyList.Add(&newPcb)
+	pm.readyList.Add(newPcb)
 
 	// If root, no parent, so no need to add to a parent list
 	if parent == -1 {
 		return
 	}
 
-	pm.pcbList[parent].children.Add(&newPcb)
+	pm.pcbList[parent].children.Add(newPcb)
 	pm.pcbList[parent].children.Values()
 
 	return
+}
+
+func canDelete(pm *ProcessManager, processInQuestion *pcb, childProcess *pcb) bool {
+	parentIndex := childProcess.parent
+	if parentIndex == -1 {
+		return false
+	}
+	currProcess := pm.pcbList[parentIndex]
+	for currProcess != nil {
+		if processInQuestion == currProcess {
+			return true
+		}
+		if currProcess.parent == -1 {
+			return false
+		}
+		currProcess = pm.pcbList[currProcess.parent]
+	}
+	return false
 }
 
 func Destroy(pm *ProcessManager, processIndex int) int {
@@ -75,30 +94,38 @@ func Destroy(pm *ProcessManager, processIndex int) int {
 		return -1
 	}
 
-	process := pm.pcbList[processIndex]
+	processToDel := pm.pcbList[processIndex]
+
+	// Check if current process is parent of process to destroy
+	currentProcessInterface, _ := pm.readyList.Get(0)
+	currentProcess := currentProcessInterface.(*pcb)
+	if !canDelete(pm, currentProcess, processToDel) {
+		fmt.Printf("Error: current process: %d is not a parent of process: %d\n", currentProcess.index, processToDel.index)
+		os.Exit(1)
+	}
 
 	numProcessesDestroyed := 0
 	// Destroy all children
-	childrenList := process.children
+	childrenList := processToDel.children
 	for i := 0; i < childrenList.Size(); i++ {
 		child, _ := childrenList.Get(i)
 		numProcessesDestroyed += Destroy(pm, child.(*pcb).index)
 	}
 
 	// Remove from parent's children list
-	parentIndex := process.parent
+	parentIndex := processToDel.parent
 	parentChildrenList := pm.pcbList[parentIndex].children
-	indexOfProcessInChildrenList := parentChildrenList.IndexOf(process)
+	indexOfProcessInChildrenList := parentChildrenList.IndexOf(processToDel)
 	parentChildrenList.Remove(indexOfProcessInChildrenList)
 
 	// Remove from Ready List or Waiting List
 	var listToRemoveFrom *DoublyLinkedList.List
-	if process.state == 1 {
+	if processToDel.state == 1 {
 		listToRemoveFrom = pm.readyList
-	} else if process.state == 0 {
-		listToRemoveFrom = pm.rcbList[process.blockedOn].waitlist
+	} else if processToDel.state == 0 {
+		listToRemoveFrom = pm.rcbList[processToDel.blockedOn].waitlist
 	}
-	indexOfProcessInList := listToRemoveFrom.IndexOf(process)
+	indexOfProcessInList := listToRemoveFrom.IndexOf(processToDel)
 	listToRemoveFrom.Remove(indexOfProcessInList)
 
 	// Free PCB from PCB list (removes from index)
@@ -109,8 +136,8 @@ func Destroy(pm *ProcessManager, processIndex int) int {
 
 func Request(pm *ProcessManager, requestIndex int) {
 	if requestIndex < 0 || requestIndex > len(pm.rcbList) {
-		fmt.Printf("Request index: %d is out of range\n", requestIndex)
-		return
+		fmt.Printf("Error: request index: %d is out of range\n", requestIndex)
+		os.Exit(1)
 	}
 
 	// Get requested resource and currently running process
@@ -118,16 +145,28 @@ func Request(pm *ProcessManager, requestIndex int) {
 	currentProcessInterface, _ := pm.readyList.Get(0)
 	currentProcess := currentProcessInterface.(*pcb)
 
+	// Root process is not allowed to request any resources
+	if currentProcess.index == 0 {
+		fmt.Println("Error: parent process not allowed to request any resources.")
+		os.Exit(1)
+	}
+
 	if resourceToRequest == nil {
 		// Resource not yet allocated, allocate it
 		resourceToRequest = &rcb{0, DoublyLinkedList.New()}
 		pm.rcbList[requestIndex] = resourceToRequest
 	}
 
+	currentlyHeldResource, _ := currentProcess.resources.Get(0)
+	if currentlyHeldResource != nil && (currentlyHeldResource == resourceToRequest) {
+		fmt.Printf("Error: cannot request resource %d. Already holding.\n", requestIndex)
+		os.Exit(1)
+	}
+
 	if resourceToRequest.state == 0 {
 		// Allocate free resource
 		resourceToRequest.state = 1
-		currentProcess.resources.Append(&resourceToRequest)
+		currentProcess.resources.Append(resourceToRequest)
 		fmt.Printf("Resource %d allocated\n", requestIndex)
 	} else {
 		// Block current process
@@ -150,6 +189,14 @@ func Release(pm *ProcessManager, releaseIndex int) {
 	resourceToRelease := pm.rcbList[releaseIndex]
 	currentProcessInterface, _ := pm.readyList.Get(0)
 	currentProcess := currentProcessInterface.(*pcb)
+
+	// Check if current process is holding the resource to release
+	currentlyHeldResource, _ := currentProcess.resources.Get(0)
+	if currentlyHeldResource == nil || (currentlyHeldResource != resourceToRelease) {
+		fmt.Printf("Error: cannot release resource %d. Not holding it.\n", releaseIndex)
+		os.Exit(1)
+	}
+	// Make sure current process is not blocked on a release
 	currentProcess.blockedOn = -1
 
 	// Remove resource from currently running process' resource list
@@ -177,7 +224,8 @@ func Release(pm *ProcessManager, releaseIndex int) {
 func scheduler(pm *ProcessManager) {
 	currRunningProcess, _ := pm.readyList.Get(0)
 	if currRunningProcess == nil {
-		fmt.Println("All processes blocked.")
+		fmt.Println("Error: all processes blocked.")
+		os.Exit(1)
 	} else {
 		fmt.Printf("Process %d running\n", currRunningProcess.(*pcb).index)
 	}
