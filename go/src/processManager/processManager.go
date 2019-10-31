@@ -12,6 +12,7 @@ type pcb struct {
 	parent    int
 	children  *DoublyLinkedList.List
 	resources *DoublyLinkedList.List
+	priority  int
 	index     int
 	blockedOn int
 }
@@ -19,6 +20,20 @@ type pcb struct {
 type rcb struct {
 	state    int
 	waitlist *DoublyLinkedList.List
+}
+
+func compareByPriority(a, b interface{}) int {
+	c1 := a.(*pcb)
+	c2 := b.(*pcb)
+
+	switch {
+	case c1.priority < c2.priority:
+		return 1
+	case c1.priority > c2.priority:
+		return -1
+	default:
+		return 0
+	}
 }
 
 func findAvailableProcess(pcbArr [16]*pcb) int {
@@ -30,9 +45,14 @@ func findAvailableProcess(pcbArr [16]*pcb) int {
 	return -1
 }
 
-func Create(pm *ProcessManager) {
+func Create(pm *ProcessManager, priority int) {
 	if pm.pcbList[15] != nil {
 		fmt.Printf("Error: process list capacity at maximum\n")
+		os.Exit(1)
+	}
+
+	if priority != 0 && priority != 1 && priority != 2 {
+		fmt.Printf("Error: priority can only be values 0, 1, 2\n")
 		os.Exit(1)
 	}
 
@@ -46,7 +66,7 @@ func Create(pm *ProcessManager) {
 
 	// Allocate new PCB with necessary default values
 	freeIndex := findAvailableProcess(pm.pcbList)
-	var newPcb = &pcb{1, parent, DoublyLinkedList.New(), DoublyLinkedList.New(), freeIndex, -1}
+	var newPcb = &pcb{1, parent, DoublyLinkedList.New(), DoublyLinkedList.New(), priority, freeIndex, -1}
 	pm.pcbList[freeIndex] = newPcb
 
 	fmt.Printf("Process %d created\n", freeIndex)
@@ -61,6 +81,9 @@ func Create(pm *ProcessManager) {
 
 	pm.pcbList[parent].children.Add(newPcb)
 	pm.pcbList[parent].children.Values()
+
+	pm.readyList.Sort(compareByPriority)
+	scheduler(pm)
 
 	return
 }
@@ -130,6 +153,8 @@ func Destroy(pm *ProcessManager, processIndex int) int {
 
 	// Free PCB from PCB list (removes from index)
 	pm.pcbList[processIndex] = nil
+
+	scheduler(pm)
 
 	return numProcessesDestroyed
 }
@@ -219,6 +244,7 @@ func Release(pm *ProcessManager, releaseIndex int) {
 		unblockedProcess.resources.Append(resourceToRelease)
 	}
 	fmt.Printf("Resource %d released\n", releaseIndex)
+	scheduler(pm)
 }
 
 func scheduler(pm *ProcessManager) {

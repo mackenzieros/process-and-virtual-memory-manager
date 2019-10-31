@@ -23,7 +23,7 @@ func processCmds(cmdSlice []string, pm *processManager.ProcessManager) {
 
 	switch cmdSlice[0] {
 	case "cr":
-		processManager.Create(pm)
+		processManager.Create(pm, cmdNum)
 		fmt.Println(pm)
 	case "de":
 		processManager.Destroy(pm, cmdNum)
@@ -42,7 +42,7 @@ func processCmds(cmdSlice []string, pm *processManager.ProcessManager) {
 
 func RunShell() {
 	var pm = processManager.InitProcessManager()
-	processManager.Create(&pm)
+	processManager.Create(&pm, 0)
 
 	reader := bufio.NewReader(os.Stdin)
 	for true {
