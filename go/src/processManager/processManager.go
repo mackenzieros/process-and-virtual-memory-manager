@@ -291,8 +291,12 @@ func updateProcessesOnRelease(pm *ProcessManager, resourceToRelease *rcb, numUni
 		processToUnblockInterface, _ := resourceToRelease.waitlist.Get(i)
 		processToUnblockInfo := processToUnblockInterface.(*resourcesNeeded)
 
+		// If one of the resources to released has unblocked a process,
+		// add the resource to the process' resource list and update the resource
 		if resourceToRelease.state >= processToUnblockInfo.numUnits {
 			resourceToRelease.waitlist.Remove(i)
+			processToUnblockInfo.process.resources.Add(&resourcesHolding{resourceToRelease, processToUnblockInfo.numUnits})
+			resourceToRelease.state -= processToUnblockInfo.numUnits
 			processToUnblockInfo.process.blockedOn = -1
 			processToUnblockInfo.process.state = 1
 			pm.readyList.Add(processToUnblockInfo.process)
