@@ -237,7 +237,16 @@ func findIndexOfHeldResource(resources *DoublyLinkedList.List, resourceInQuestio
 }
 
 func Request(pm *ProcessManager, requestIndex int, numUnits int) {
+	// Check for range error
 	if requestIndex < 0 || requestIndex > len(pm.rcbList) {
+		fmt.Printf("-1 ")
+		return
+	}
+
+	// Check for limits on resource units
+	if ((requestIndex == 0 || requestIndex == 1) && numUnits > 1) ||
+		(requestIndex == 2 && numUnits > 2) ||
+		(requestIndex == 3 && numUnits > 3) {
 		fmt.Printf("-1 ")
 		return
 	}
@@ -254,11 +263,10 @@ func Request(pm *ProcessManager, requestIndex int, numUnits int) {
 	}
 
 	currentlyHeldResourceObj, _ := currentProcess.resources.Get(0)
-	// Check if number to release does not exceed amount currently held
-	amtCurrentlyHeld := resourceToRequest.inventory - resourceToRequest.state
+	// Check if number to request does not exceed amount currently held plus inventory
 	// Check so that current resource cannot request more resources than allowed
 	if currentlyHeldResourceObj != nil && (currentlyHeldResourceObj.(*resourcesHolding).resource == resourceToRequest) &&
-		numUnits > amtCurrentlyHeld {
+		currentlyHeldResourceObj.(*resourcesHolding).numUnits+numUnits > resourceToRequest.inventory {
 		fmt.Printf("-1 ")
 		return
 	}
@@ -305,7 +313,16 @@ func updateProcessesOnRelease(pm *ProcessManager, resourceToRelease *rcb, numUni
 }
 
 func Release(pm *ProcessManager, releaseIndex int, numUnits int) {
+	// Check for range limits
 	if releaseIndex < 0 || releaseIndex > len(pm.rcbList) {
+		fmt.Printf("-1 ")
+		return
+	}
+
+	// Check for limits on resource units
+	if ((releaseIndex == 0 || releaseIndex == 1) && numUnits > 1) ||
+		(releaseIndex == 2 && numUnits > 2) ||
+		(releaseIndex == 3 && numUnits > 3) {
 		fmt.Printf("-1 ")
 		return
 	}
