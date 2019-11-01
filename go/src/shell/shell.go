@@ -44,21 +44,19 @@ func processCmds(cmdSlice []string, pm *processManager.ProcessManager) {
 }
 
 func RunShell() {
-	var pm = processManager.InitProcessManager()
-	processManager.Create(&pm, 0)
-	fmt.Println()
+	var pm = &processManager.ProcessManager{}
+	// var pm = processManager.InitProcessManager()
 
 	filename := os.Args[1]
 	f, _ := os.Open(filename)
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		cmd := scanner.Text()
-		if len(cmd) == 0 {
-			break
-		}
 		cmdSlice := strings.Fields(cmd)
-		processCmds(cmdSlice, &pm)
-		fmt.Println()
+		if len(cmdSlice) == 0 {
+			continue
+		}
+		processCmds(cmdSlice, pm)
 	}
 }
 
