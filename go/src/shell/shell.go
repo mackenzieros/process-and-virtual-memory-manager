@@ -33,7 +33,7 @@ func processCmds(cmdSlice []string, pm *processManager.ProcessManager) {
 	case "to":
 		processManager.Timeout(pm)
 	case "in":
-		RunShell()
+		processManager.Reset(pm)
 	case "rq":
 		processManager.Request(pm, cmdNum1, cmdNum2)
 	case "rl":
@@ -60,16 +60,6 @@ func RunShell() {
 		processCmds(cmdSlice, &pm)
 		fmt.Println()
 	}
-	// for true {
-	// 	fmt.Print("Enter command: ")
-	// 	cmd, _ := reader.ReadString('\n')
-	// 	cmd = strings.TrimSpace(cmd)
-	// 	cmdSlice := strings.Fields(cmd)
-	// 	if cmdSlice[0] == "q" {
-	// 		break
-	// 	}
-	// 	processCmds(cmdSlice, &pm)
-	// }
 }
 
 func main() {

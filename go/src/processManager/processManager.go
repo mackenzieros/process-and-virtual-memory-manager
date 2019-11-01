@@ -302,6 +302,10 @@ func Timeout(pm *ProcessManager) {
 	scheduler(pm)
 }
 
+func Reset(pm *ProcessManager) {
+	*pm = InitProcessManager()
+}
+
 type ProcessManager struct {
 	pcbList   [16]*pcb
 	rcbList   [4]*rcb
@@ -311,9 +315,6 @@ type ProcessManager struct {
 func InitProcessManager() ProcessManager {
 	fmt.Printf("Initializing process manager...\n")
 	var processManager ProcessManager
-	// for i := 0; i < 16; i++ {
-	// 	processManager.pcbList[i] = &pcb{1, parent, DoublyLinkedList.New(), DoublyLinkedList.New(), 0, i, -1}
-	// }
 	processManager.rcbList[0] = &rcb{1, DoublyLinkedList.New(), 1}
 	processManager.rcbList[1] = &rcb{1, DoublyLinkedList.New(), 1}
 	processManager.rcbList[2] = &rcb{2, DoublyLinkedList.New(), 2}
