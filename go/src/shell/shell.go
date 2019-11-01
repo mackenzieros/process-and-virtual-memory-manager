@@ -11,10 +11,14 @@ import (
 )
 
 func processCmds(cmdSlice []string, pm *processManager.ProcessManager) {
-	var cmdNum int
+	var cmdNum1 int
+	var cmdNum2 int
 	var err error
 	if len(cmdSlice) > 1 {
-		cmdNum, err = strconv.Atoi(cmdSlice[1])
+		cmdNum1, err = strconv.Atoi(cmdSlice[1])
+		if len(cmdSlice) > 2 {
+			cmdNum2, err = strconv.Atoi(cmdSlice[2])
+		}
 		if err != nil {
 			fmt.Println(err)
 			return
@@ -23,17 +27,17 @@ func processCmds(cmdSlice []string, pm *processManager.ProcessManager) {
 
 	switch cmdSlice[0] {
 	case "cr":
-		processManager.Create(pm, cmdNum)
+		processManager.Create(pm, cmdNum1)
 	case "de":
-		processManager.Destroy(pm, cmdNum)
+		processManager.Destroy(pm, cmdNum1)
 	case "to":
 		processManager.Timeout(pm)
 	case "in":
 		RunShell()
 	case "rq":
-		processManager.Request(pm, cmdNum)
+		processManager.Request(pm, cmdNum1, cmdNum2)
 	case "rl":
-		processManager.Release(pm, cmdNum)
+		processManager.Release(pm, cmdNum1, cmdNum2)
 	default:
 		fmt.Printf("Unable to process unknown command: %q.\n", cmdSlice[0])
 	}
@@ -42,13 +46,13 @@ func processCmds(cmdSlice []string, pm *processManager.ProcessManager) {
 func RunShell() {
 	var pm = processManager.InitProcessManager()
 	processManager.Create(&pm, 0)
+	fmt.Println()
 
 	filename := os.Args[1]
 	f, _ := os.Open(filename)
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		cmd := scanner.Text()
-		fmt.Println(cmd)
 		if len(cmd) == 0 {
 			break
 		}

@@ -18,8 +18,9 @@ type pcb struct {
 }
 
 type rcb struct {
-	state    int
-	waitlist *DoublyLinkedList.List
+	state     int
+	waitlist  *DoublyLinkedList.List
+	inventory int
 }
 
 func compareByPriority(a, b interface{}) int {
@@ -181,7 +182,7 @@ func Destroy(pm *ProcessManager, processIndex int) int {
 	return numProcessesDestroyed
 }
 
-func Request(pm *ProcessManager, requestIndex int) {
+func Request(pm *ProcessManager, requestIndex int, numUnits int) {
 	if requestIndex < 0 || requestIndex > len(pm.rcbList) {
 		fmt.Printf("Error: request index: %d is out of range\n", requestIndex)
 		os.Exit(1)
@@ -198,10 +199,11 @@ func Request(pm *ProcessManager, requestIndex int) {
 		os.Exit(1)
 	}
 
-	if resourceToRequest == nil {
-		// Resource not yet allocated, allocate it
-		resourceToRequest = &rcb{0, DoublyLinkedList.New()}
-		pm.rcbList[requestIndex] = resourceToRequest
+	// Check if units requested is within limits of inventory
+	inventory := resourceToRequest.inventory
+	if numUnits-resourceToRequest.state > inventory {
+		fmt.Printf("Error: cannot request more than inventory amount %d\n", inventory)
+		os.Exit(1)
 	}
 
 	currentlyHeldResource, _ := currentProcess.resources.Get(0)
@@ -210,9 +212,9 @@ func Request(pm *ProcessManager, requestIndex int) {
 		os.Exit(1)
 	}
 
-	if resourceToRequest.state == 0 {
+	if resourceToRequest.state != 0 {
 		// Allocate free resource
-		resourceToRequest.state = 1
+		resourceToRequest.state -= numUnits
 		currentProcess.resources.Append(resourceToRequest)
 		fmt.Printf("Resource %d allocated\n", requestIndex)
 	} else {
@@ -239,7 +241,7 @@ func unblockProcessOnRelease(pm *ProcessManager, resourceToRelease *rcb) {
 	unblockedProcess.resources.Append(resourceToRelease)
 }
 
-func Release(pm *ProcessManager, releaseIndex int) {
+func Release(pm *ProcessManager, releaseIndex int, numUnits int) {
 	if releaseIndex < 0 || releaseIndex > len(pm.rcbList) {
 		fmt.Printf("Release index: %d is out of range\n", releaseIndex)
 		return
@@ -247,30 +249,38 @@ func Release(pm *ProcessManager, releaseIndex int) {
 
 	// Get resource to release and currently running process
 	resourceToRelease := pm.rcbList[releaseIndex]
-	currentProcessInterface, _ := pm.readyList.Get(0)
-	currentProcess := currentProcessInterface.(*pcb)
 
-	// Check if current process is holding the resource to release
-	currentlyHeldResource, _ := currentProcess.resources.Get(0)
-	if currentlyHeldResource == nil || (currentlyHeldResource != resourceToRelease) {
-		fmt.Printf("Error: cannot release resource %d. Not holding it.\n", releaseIndex)
-		os.Exit(1)
+	// Check if number to release does not exceed amount currently held
+	amtCurrentlyHeld := resourceToRelease.inventory - resourceToRelease.state
+	if numUnits > amtCurrentlyHeld {
+		fmt.Printf("Error: cannot release this resource more times than amount currently being held: %d\n", amtCurrentlyHeld)
 	}
-	// Make sure current process is not blocked on a release
-	currentProcess.blockedOn = -1
+	for i := 0; i < numUnits; i++ {
+		currentProcessInterface, _ := pm.readyList.Get(0)
+		currentProcess := currentProcessInterface.(*pcb)
 
-	// Remove resource from currently running process' resource list
-	indexOfResource := currentProcess.resources.IndexOf(resourceToRelease)
-	currentProcess.resources.Remove(indexOfResource)
+		// Check if current process is holding the resource to release
+		currentlyHeldResource, _ := currentProcess.resources.Get(0)
+		if currentlyHeldResource == nil || (currentlyHeldResource != resourceToRelease) {
+			fmt.Printf("Error: cannot release resource %d. Not holding it.\n", releaseIndex)
+			os.Exit(1)
+		}
+		// Make sure current process is not blocked on a release
+		currentProcess.blockedOn = -1
 
-	if resourceToRelease.waitlist.Empty() {
-		// No waiting processes, so set to free
-		resourceToRelease.state = 0
-	} else {
-		unblockProcessOnRelease(pm, resourceToRelease)
+		// Remove resource from currently running process' resource list
+		indexOfResource := currentProcess.resources.IndexOf(resourceToRelease)
+		currentProcess.resources.Remove(indexOfResource)
+
+		if resourceToRelease.waitlist.Empty() {
+			// No waiting processes, so set to free
+			resourceToRelease.state++
+		} else {
+			unblockProcessOnRelease(pm, resourceToRelease)
+		}
+		fmt.Printf("Resource %d released\n", releaseIndex)
+		pm.readyList.Sort(compareByPriority)
 	}
-	fmt.Printf("Resource %d released\n", releaseIndex)
-	pm.readyList.Sort(compareByPriority)
 	scheduler(pm)
 }
 
@@ -301,6 +311,13 @@ type ProcessManager struct {
 func InitProcessManager() ProcessManager {
 	fmt.Printf("Initializing process manager...\n")
 	var processManager ProcessManager
+	// for i := 0; i < 16; i++ {
+	// 	processManager.pcbList[i] = &pcb{1, parent, DoublyLinkedList.New(), DoublyLinkedList.New(), 0, i, -1}
+	// }
+	processManager.rcbList[0] = &rcb{1, DoublyLinkedList.New(), 1}
+	processManager.rcbList[1] = &rcb{1, DoublyLinkedList.New(), 1}
+	processManager.rcbList[2] = &rcb{2, DoublyLinkedList.New(), 2}
+	processManager.rcbList[3] = &rcb{3, DoublyLinkedList.New(), 3}
 	processManager.readyList = DoublyLinkedList.New()
 	fmt.Printf("Process manager initialized!\n")
 	return processManager
