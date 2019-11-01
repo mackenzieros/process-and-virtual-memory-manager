@@ -106,6 +106,15 @@ func canDelete(pm *ProcessManager, processInQuestion *pcb, childProcess *pcb) bo
 	return false
 }
 
+func findIndexOfResourceToRelease(pm *ProcessManager, resourceInQuestion *rcb) int {
+	for i := 0; i < len(pm.rcbList); i++ {
+		if resourceInQuestion == pm.rcbList[i] {
+			return i
+		}
+	}
+	return -1
+}
+
 func Destroy(pm *ProcessManager, processIndex int) int {
 	if processIndex < 0 || processIndex > len(pm.pcbList) {
 		fmt.Printf("Process index to destroy: %d is out of range\n", processIndex)
@@ -151,9 +160,22 @@ func Destroy(pm *ProcessManager, processIndex int) int {
 	indexOfProcessInList := listToRemoveFrom.IndexOf(processToDel)
 	listToRemoveFrom.Remove(indexOfProcessInList)
 
+	// Release all resources held by this process
+	for i := 0; i < processToDel.resources.Size(); i++ {
+		resource, _ := processToDel.resources.Get(i)
+		indexOfResouceToRelease := findIndexOfResourceToRelease(pm, resource.(*rcb))
+		if indexOfResouceToRelease == -1 {
+			fmt.Println("Error: could not find resource to release in Destroy...")
+			os.Exit(1)
+		}
+		resourceToRelease := pm.rcbList[indexOfResouceToRelease]
+		unblockProcessOnRelease(pm, resourceToRelease)
+	}
+
 	// Free PCB from PCB list (removes from index)
 	pm.pcbList[processIndex] = nil
 
+	pm.readyList.Sort(compareByPriority)
 	scheduler(pm)
 
 	return numProcessesDestroyed
@@ -204,6 +226,19 @@ func Request(pm *ProcessManager, requestIndex int) {
 	}
 }
 
+func unblockProcessOnRelease(pm *ProcessManager, resourceToRelease *rcb) {
+	// Un-block process on resource's waitlist and move it to the ready list
+	unblockedProcessInterface, _ := resourceToRelease.waitlist.Get(0)
+	resourceToRelease.waitlist.Remove(0)
+	unblockedProcess := unblockedProcessInterface.(*pcb)
+
+	pm.readyList.Append(unblockedProcess)
+
+	unblockedProcess.blockedOn = -1
+	unblockedProcess.state = 0
+	unblockedProcess.resources.Append(resourceToRelease)
+}
+
 func Release(pm *ProcessManager, releaseIndex int) {
 	if releaseIndex < 0 || releaseIndex > len(pm.rcbList) {
 		fmt.Printf("Release index: %d is out of range\n", releaseIndex)
@@ -232,18 +267,10 @@ func Release(pm *ProcessManager, releaseIndex int) {
 		// No waiting processes, so set to free
 		resourceToRelease.state = 0
 	} else {
-		// Un-block process on resource's waitlist and move it to the ready list
-		unblockedProcessInterface, _ := resourceToRelease.waitlist.Get(0)
-		resourceToRelease.waitlist.Remove(0)
-		unblockedProcess := unblockedProcessInterface.(*pcb)
-
-		pm.readyList.Append(unblockedProcess)
-
-		unblockedProcess.blockedOn = -1
-		unblockedProcess.state = 0
-		unblockedProcess.resources.Append(resourceToRelease)
+		unblockProcessOnRelease(pm, resourceToRelease)
 	}
 	fmt.Printf("Resource %d released\n", releaseIndex)
+	pm.readyList.Sort(compareByPriority)
 	scheduler(pm)
 }
 

@@ -24,7 +24,6 @@ func processCmds(cmdSlice []string, pm *processManager.ProcessManager) {
 	switch cmdSlice[0] {
 	case "cr":
 		processManager.Create(pm, cmdNum)
-		fmt.Println(pm)
 	case "de":
 		processManager.Destroy(pm, cmdNum)
 	case "to":
@@ -44,17 +43,29 @@ func RunShell() {
 	var pm = processManager.InitProcessManager()
 	processManager.Create(&pm, 0)
 
-	reader := bufio.NewReader(os.Stdin)
-	for true {
-		fmt.Print("Enter command: ")
-		cmd, _ := reader.ReadString('\n')
-		cmd = strings.TrimSpace(cmd)
-		cmdSlice := strings.Fields(cmd)
-		if cmdSlice[0] == "q" {
+	filename := os.Args[1]
+	f, _ := os.Open(filename)
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		cmd := scanner.Text()
+		fmt.Println(cmd)
+		if len(cmd) == 0 {
 			break
 		}
+		cmdSlice := strings.Fields(cmd)
 		processCmds(cmdSlice, &pm)
+		fmt.Println()
 	}
+	// for true {
+	// 	fmt.Print("Enter command: ")
+	// 	cmd, _ := reader.ReadString('\n')
+	// 	cmd = strings.TrimSpace(cmd)
+	// 	cmdSlice := strings.Fields(cmd)
+	// 	if cmdSlice[0] == "q" {
+	// 		break
+	// 	}
+	// 	processCmds(cmdSlice, &pm)
+	// }
 }
 
 func main() {
