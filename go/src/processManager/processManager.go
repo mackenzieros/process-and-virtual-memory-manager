@@ -177,14 +177,11 @@ func destroyAuxillary(
 	var indexOfProcessInList int
 	if processToDel.state == 1 {
 		listToRemoveFrom = pm.readyList
-		// fmt.Println(processToDel)
 		indexOfProcessInList = listToRemoveFrom.IndexOf(processToDel)
-		// fmt.Println(indexOfProcessInList)
 	} else if processToDel.state == 0 {
 		listToRemoveFrom = pm.rcbList[processToDel.blockedOn].waitlist
 		indexOfProcessInList = findProcessInWaitlist(listToRemoveFrom, processToDel)
 	}
-	// fmt.Println(pm.readyList.Get(indexOfProcessInList))
 	listToRemoveFrom.Remove(indexOfProcessInList)
 
 	// Free PCB from PCB list (removes from index)
@@ -229,6 +226,16 @@ func Destroy(pm *ProcessManager, processIndex int) int {
 	return numProcessesDestroyed
 }
 
+func findIndexOfHeldResource(resources *DoublyLinkedList.List, resourceInQuestion *rcb) int {
+	for i := 0; i < resources.Size(); i++ {
+		heldResourceObj, _ := resources.Get(i)
+		if resourceInQuestion == heldResourceObj.(*resourcesHolding).resource {
+			return i
+		}
+	}
+	return -1
+}
+
 func Request(pm *ProcessManager, requestIndex int, numUnits int) {
 	if requestIndex < 0 || requestIndex > len(pm.rcbList) {
 		fmt.Printf("-1 ")
@@ -258,8 +265,14 @@ func Request(pm *ProcessManager, requestIndex int, numUnits int) {
 
 	if resourceToRequest.state-numUnits >= 0 {
 		// Allocate free resource
+		resourceIndex := findIndexOfHeldResource(currentProcess.resources, resourceToRequest)
+		if resourceIndex == -1 {
+			currentProcess.resources.Append(&resourcesHolding{resourceToRequest, numUnits})
+		} else {
+			alreadyOwnedResource, _ := currentProcess.resources.Get(resourceIndex)
+			alreadyOwnedResource.(*resourcesHolding).numUnits += numUnits
+		}
 		resourceToRequest.state -= numUnits
-		currentProcess.resources.Append(&resourcesHolding{resourceToRequest, numUnits})
 	} else {
 		// Block current process
 		currentProcess.state = 0
@@ -272,13 +285,13 @@ func Request(pm *ProcessManager, requestIndex int, numUnits int) {
 }
 
 func updateProcessesOnRelease(pm *ProcessManager, resourceToRelease *rcb, numUnits int) {
+	resourceToRelease.state += numUnits
 	// Un-block process on resource's waitlist and move it to the ready list
 	for i := 0; i < resourceToRelease.waitlist.Size(); i++ {
 		processToUnblockInterface, _ := resourceToRelease.waitlist.Get(i)
 		processToUnblockInfo := processToUnblockInterface.(*resourcesNeeded)
-		resourceToRelease.state++
 
-		if numUnits+resourceToRelease.state >= processToUnblockInfo.numUnits {
+		if resourceToRelease.state >= processToUnblockInfo.numUnits {
 			resourceToRelease.waitlist.Remove(i)
 			processToUnblockInfo.process.blockedOn = -1
 			processToUnblockInfo.process.state = 1
@@ -302,21 +315,17 @@ func Release(pm *ProcessManager, releaseIndex int, numUnits int) {
 	// Check if current process is holding the resource to release
 	currentlyHeldResourceObj, _ := currentProcess.resources.Get(0)
 	if currentlyHeldResourceObj == nil || (currentlyHeldResourceObj.(*resourcesHolding).resource != resourceToRelease) {
-		fmt.Printf("-1")
+		fmt.Printf("-1 ")
 		return
 	}
 
 	// Check if number to release does not exceed amount currently held
 	if numUnits > currentlyHeldResourceObj.(*resourcesHolding).numUnits {
-		fmt.Printf("-1")
+		fmt.Printf("-1 ")
 		return
 	}
 
 	for i := 0; i < numUnits; i++ {
-		// Remove resource from currently running process' resource list
-		indexOfResource := currentProcess.resources.IndexOf(currentlyHeldResourceObj.(*resourcesHolding))
-		currentProcess.resources.Remove(indexOfResource)
-
 		if resourceToRelease.waitlist.Empty() {
 			// No waiting processes, so set to free
 			resourceToRelease.state++
@@ -324,6 +333,14 @@ func Release(pm *ProcessManager, releaseIndex int, numUnits int) {
 			updateProcessesOnRelease(pm, resourceToRelease, 1)
 		}
 		pm.readyList.Sort(compareByPriority)
+	}
+
+	// Remove resource from currently running process' resource list when resources run out
+	indexOfResource := currentProcess.resources.IndexOf(currentlyHeldResourceObj.(*resourcesHolding))
+	if currentlyHeldResourceObj.(*resourcesHolding).numUnits-numUnits == 0 {
+		currentProcess.resources.Remove(indexOfResource)
+	} else {
+		currentlyHeldResourceObj.(*resourcesHolding).numUnits -= numUnits
 	}
 	scheduler(pm)
 }
