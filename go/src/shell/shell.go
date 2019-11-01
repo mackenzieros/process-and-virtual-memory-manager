@@ -45,7 +45,6 @@ func processCmds(cmdSlice []string, pm *processManager.ProcessManager) {
 
 func RunShell() {
 	var pm = &processManager.ProcessManager{}
-	// var pm = processManager.InitProcessManager()
 
 	filename := os.Args[1]
 	f, _ := os.Open(filename)

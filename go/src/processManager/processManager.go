@@ -1,7 +1,9 @@
 package processManager
 
 import (
-	"fmt"
+	// "fmt"
+	"os"
+	"strconv"
 
 	DoublyLinkedList "github.com/emirpasic/gods/lists/doublylinkedlist"
 )
@@ -57,12 +59,12 @@ func findAvailableProcess(pcbArr [16]*pcb) int {
 
 func Create(pm *ProcessManager, priority int) {
 	if pm.pcbList[15] != nil {
-		fmt.Printf("-1 ")
+		writeToOutput("-1")
 		return
 	}
 
 	if priority != 0 && priority != 1 && priority != 2 {
-		fmt.Printf("-1 ")
+		writeToOutput("-1")
 		return
 	}
 
@@ -165,7 +167,7 @@ func destroyAuxillary(
 		resourceObj, _ := processToDel.resources.Get(i)
 		indexOfResourceToRelease := findIndexOfResourceToRelease(pm, resourceObj.(*resourcesHolding).resource)
 		if indexOfResourceToRelease == -1 {
-			fmt.Printf("-1 ")
+			writeToOutput("-1")
 			return 0
 		}
 		resourceToRelease := pm.rcbList[indexOfResourceToRelease]
@@ -192,12 +194,12 @@ func destroyAuxillary(
 
 func Destroy(pm *ProcessManager, processIndex int) int {
 	if processIndex < 0 || processIndex > len(pm.pcbList) {
-		fmt.Printf("-1 ")
+		writeToOutput("-1")
 		return 0
 	}
 
 	if pm.pcbList[processIndex] == nil {
-		fmt.Printf("-1 ")
+		writeToOutput("-1")
 		return 0
 	}
 
@@ -206,7 +208,7 @@ func Destroy(pm *ProcessManager, processIndex int) int {
 	currentProcessInterface, _ := pm.readyList.Get(0)
 	currentProcess := currentProcessInterface.(*pcb)
 	if !canDelete(pm, currentProcess, processToDel) {
-		fmt.Printf("-1 ")
+		writeToOutput("-1")
 		return 0
 	}
 
@@ -239,7 +241,7 @@ func findIndexOfHeldResource(resources *DoublyLinkedList.List, resourceInQuestio
 func Request(pm *ProcessManager, requestIndex int, numUnits int) {
 	// Check for range error
 	if requestIndex < 0 || requestIndex > len(pm.rcbList) {
-		fmt.Printf("-1 ")
+		writeToOutput("-1")
 		return
 	}
 
@@ -247,7 +249,7 @@ func Request(pm *ProcessManager, requestIndex int, numUnits int) {
 	if ((requestIndex == 0 || requestIndex == 1) && numUnits > 1) ||
 		(requestIndex == 2 && numUnits > 2) ||
 		(requestIndex == 3 && numUnits > 3) {
-		fmt.Printf("-1 ")
+		writeToOutput("-1")
 		return
 	}
 
@@ -258,7 +260,7 @@ func Request(pm *ProcessManager, requestIndex int, numUnits int) {
 
 	// Root process is not allowed to request any resources
 	if currentProcess.index == 0 {
-		fmt.Printf("-1 ")
+		writeToOutput("-1")
 		return
 	}
 
@@ -267,7 +269,7 @@ func Request(pm *ProcessManager, requestIndex int, numUnits int) {
 	// Check so that current resource cannot request more resources than allowed
 	if currentlyHeldResourceObj != nil && (currentlyHeldResourceObj.(*resourcesHolding).resource == resourceToRequest) &&
 		currentlyHeldResourceObj.(*resourcesHolding).numUnits+numUnits > resourceToRequest.inventory {
-		fmt.Printf("-1 ")
+		writeToOutput("-1")
 		return
 	}
 
@@ -315,7 +317,7 @@ func updateProcessesOnRelease(pm *ProcessManager, resourceToRelease *rcb, numUni
 func Release(pm *ProcessManager, releaseIndex int, numUnits int) {
 	// Check for range limits
 	if releaseIndex < 0 || releaseIndex > len(pm.rcbList) {
-		fmt.Printf("-1 ")
+		writeToOutput("-1")
 		return
 	}
 
@@ -323,7 +325,7 @@ func Release(pm *ProcessManager, releaseIndex int, numUnits int) {
 	if ((releaseIndex == 0 || releaseIndex == 1) && numUnits > 1) ||
 		(releaseIndex == 2 && numUnits > 2) ||
 		(releaseIndex == 3 && numUnits > 3) {
-		fmt.Printf("-1 ")
+		writeToOutput("-1")
 		return
 	}
 
@@ -336,13 +338,13 @@ func Release(pm *ProcessManager, releaseIndex int, numUnits int) {
 	// Check if current process is holding the resource to release
 	currentlyHeldResourceObj, _ := currentProcess.resources.Get(0)
 	if currentlyHeldResourceObj == nil || (currentlyHeldResourceObj.(*resourcesHolding).resource != resourceToRelease) {
-		fmt.Printf("-1 ")
+		writeToOutput("-1")
 		return
 	}
 
 	// Check if number to release does not exceed amount currently held
 	if numUnits > currentlyHeldResourceObj.(*resourcesHolding).numUnits {
-		fmt.Printf("-1 ")
+		writeToOutput("-1")
 		return
 	}
 
@@ -369,9 +371,9 @@ func Release(pm *ProcessManager, releaseIndex int, numUnits int) {
 func scheduler(pm *ProcessManager) {
 	currRunningProcess, _ := pm.readyList.Get(0)
 	if currRunningProcess == nil {
-		fmt.Printf("-1 ")
+		writeToOutput("-1")
 	} else {
-		fmt.Printf("%d ", currRunningProcess.(*pcb).index)
+		writeToOutput(strconv.Itoa(currRunningProcess.(*pcb).index))
 	}
 }
 
@@ -385,8 +387,21 @@ func Timeout(pm *ProcessManager) {
 }
 
 func Reset(pm *ProcessManager) {
-	fmt.Println()
+	writeToOutput(" \n")
 	InitProcessManager(pm)
+}
+
+func writeToOutput(content string) {
+	f, err := os.OpenFile("./output.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+
+	_, err = f.WriteString(content + " ")
+	if err != nil {
+		panic(err)
+	}
 }
 
 type ProcessManager struct {
