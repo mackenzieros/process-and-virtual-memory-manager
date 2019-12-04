@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	DoublyLinkedList "github.com/emirpasic/gods/lists/doublylinkedlist"
 	"math"
 	"os"
 	"strconv"
@@ -35,6 +36,19 @@ func processSegmentTableLine(vmm *virtualMemoryManager.VirtualMemoryManager, stL
 		(*vmm).PhysicalMemory[2*segmentNum] = segmentLen
 		(*vmm).PhysicalMemory[2*segmentNum+1] = frameNum
 		segmentTriple = segmentTriple[:0]
+
+		// If frame is allocated, set as free,
+		// otherwise, save info on block data
+		if frameNum*(-1) < 1 {
+			frame, _ := vmm.FreeFrames.Get(frameNum)
+			frame.(*virtualMemoryManager.DiskFrame).Free = 1
+		} else {
+			frame, _ := vmm.FreeFrames.Get(frameNum * (-1))
+			frame.(*virtualMemoryManager.DiskFrame).Free = 0
+			frame.(*virtualMemoryManager.DiskFrame).Index = frameNum * (-1)
+			frame.(*virtualMemoryManager.DiskFrame).Block[0] = segmentLen
+			frame.(*virtualMemoryManager.DiskFrame).Block[1] = frameNum * (-1)
+		}
 	}
 }
 
@@ -58,12 +72,25 @@ func processPageTableLine(vmm *virtualMemoryManager.VirtualMemoryManager, ptLine
 		// Parse triple and place values into PM
 		segmentNum := pageTriple[0]
 		pageNum := pageTriple[1]
-		frameNum := pageTriple[2]
+		pageFrameNum := pageTriple[2]
 
-		absFrameNum := math.Abs(float64((*vmm).PhysicalMemory[2*segmentNum+1]))
-		pageFrameNum := int(absFrameNum)*512 + pageNum
-		(*vmm).PhysicalMemory[pageFrameNum] = frameNum
+		rawFrameNum := (*vmm).PhysicalMemory[2*segmentNum+1]
+		absFrameNum := math.Abs(float64(rawFrameNum))
+		pageFrameNumIndex := int(absFrameNum)*512 + pageNum
+		(*vmm).PhysicalMemory[pageFrameNumIndex] = pageFrameNum
 		pageTriple = pageTriple[:0]
+
+		// If frame is allocated, set as free,
+		// otherwise, save info on block data
+		if rawFrameNum*(-1) < 1 {
+			frame, _ := vmm.FreeFrames.Get(rawFrameNum)
+			frame.(*virtualMemoryManager.DiskFrame).Free = 1
+		} else {
+			frame, _ := vmm.FreeFrames.Get(rawFrameNum * (-1))
+			frame.(*virtualMemoryManager.DiskFrame).Free = 0
+			frame.(*virtualMemoryManager.DiskFrame).Index = rawFrameNum * (-1)
+			frame.(*virtualMemoryManager.DiskFrame).Block[pageNum] = pageFrameNum
+		}
 	}
 }
 
@@ -121,8 +148,20 @@ func readVAs(vaFilepath string) []string {
 func RunDriver() {
 	pmInitFilename := os.Args[1]
 	var vmm = virtualMemoryManager.InitVirtualMemoryManager()
+
+	// Initialize all frames in Page Disk to be free except frames 0 and 1
+	vmm.FreeFrames = DoublyLinkedList.New()
+	for i := 0; i < 1024; i++ {
+		freeVal := 0
+		if i == 0 || i == 1 {
+			freeVal = 1
+		}
+
+		var block [512]int
+		vmm.FreeFrames.Add(&virtualMemoryManager.DiskFrame{Index: i, Free: freeVal, Block: block})
+	}
+
 	initializePhysicalMemory(vmm, pmInitFilename)
-	// fmt.Println(vmm.PhysicalMemory[vmm.PhysicalMemory[2*8+1]*512+0])
 	vaToTranslateFilename := os.Args[2]
 	virtualAddresses := readVAs(vaToTranslateFilename)
 	virtualMemoryManager.TranslateVAs(vmm, virtualAddresses)
